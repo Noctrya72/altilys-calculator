@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1b2d">
+  <meta name="description" content="Retrouve la station de ski correspondant à des coordonnées GPS approximatives et récupère ses coordonnées de référence.">
+  <title>Repère GPS — Stations de ski</title>
+  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="Repère GPS, accueil"><span class="brand-mark">⌖</span><span>REPÈRE <b>GPS</b></span></a>
+    <span class="top-note">Outil de correspondance des stations</span>
+  </header>
+  <main class="layout">
+    <section class="intro">
+      <p class="eyebrow">COORDONNÉES APPROXIMATIVES → RÉFÉRENCE STATION</p>
+      <h1>Retrouve le bon point GPS.</h1>
+      <p class="intro-copy">Colle une seule ligne de coordonnées. L’outil compare le point au catalogue de stations, identifie les stations les plus proches et propose leurs coordonnées de référence.</p>
+    </section>
+
+    <section class="search-card" aria-labelledby="search-title">
+      <div class="card-heading">
+        <div><span class="step">01</span><h2 id="search-title">Coordonnées d’entrée</h2></div>
+        <span class="small-tag">Une seule ligne</span>
+      </div>
+      <form id="coordinate-form">
+        <label for="coordinate-input">Latitude et longitude</label>
+        <div class="input-wrap"><input id="coordinate-input" name="coordinates" autocomplete="off" spellcheck="false" value="lat: 45.889, lon: 6.735" placeholder="lat: 45.889, lon: 6.735" required><button class="primary-btn" id="search-button" type="submit"><span>Identifier la station</span><span aria-hidden="true">↗</span></button></div>
+        <div class="input-meta"><span>Exemple : <code>lat: 45.889, lon: 6.735</code></span><button id="use-example" type="button" class="text-btn">Charger un exemple</button></div>
+      </form>
+      <div id="status" class="status" role="status" aria-live="polite">Prêt à analyser les coordonnées.</div>
+    </section>
+
+    <section id="result-section" class="result-section" hidden>
+      <div class="result-card">
+        <div class="card-heading">
+          <div><span class="step">02</span><h2>Station reconnue</h2></div>
+          <span id="confidence" class="confidence">Correspondance</span>
+        </div>
+        <div class="station-title-row"><div><p id="station-massif" class="station-massif"></p><h3 id="station-name">—</h3><p id="station-distance" class="distance"></p></div><a id="osm-link" class="outline-btn" target="_blank" rel="noopener noreferrer">Voir sur OSM ↗</a></div>
+        <div class="coordinate-output">
+          <div class="coordinate-output-heading"><div><span class="output-label">COORDONNÉES DE RÉFÉRENCE</span><p class="precision-note" id="precision-note">Coordonnées provenant du catalogue.</p></div><button id="copy-coordinates" class="copy-btn" type="button">Copier</button></div>
+          <div class="coordinate-pair"><div><span>LATITUDE</span><strong id="output-lat">—</strong></div><div><span>LONGITUDE</span><strong id="output-lon">—</strong></div></div>
+          <p id="source-note" class="source-note"></p>
+        </div>
+        <div class="alternatives-wrap"><div class="alternatives-header"><h4>Autres stations proches</h4><span>Choisis si la première n’est pas la bonne</span></div><div id="alternatives" class="alternatives"></div></div>
+      </div>
+    </section>
+
+    <section class="map-card">
+      <div class="card-heading map-heading"><div><span class="step">03</span><h2>Emplacement sur la carte</h2></div><a id="open-map" class="outline-btn" href="https://www.openstreetmap.org/" target="_blank" rel="noopener noreferrer">Ouvrir la carte ↗</a></div>
+      <div id="map" aria-label="Carte interactive des coordonnées de la station"></div>
+      <div class="map-footer"><span class="map-dot"></span><span id="map-caption">La carte affichera le point de référence de la station sélectionnée.</span><span class="attribution">© OpenStreetMap contributors</span></div>
+    </section>
+
+    <section class="explanation">
+      <div class="info-icon">i</div><div><h3>Ce que fait réellement l’outil</h3><p>Il ne transforme pas mathématiquement une coordonnée arrondie en coordonnée exacte : il cherche la station la plus proche dans le catalogue, puis utilise ses coordonnées de référence. Si la donnée du catalogue est approximative, l’outil tente de la vérifier avec OpenStreetMap. Les décimales affichées ne garantissent pas à elles seules une précision de quelques centimètres.</p></div>
+    </section>
+    <footer>Catalogue de stations adapté des données ALPÉLYS fournies · Les coordonnées peuvent désigner un point de référence de station, pas toute l’étendue du domaine skiable.</footer>
+  </main>
+</body>
+</html>

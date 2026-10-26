@@ -1,0 +1,362 @@
+[
+  {
+    "name": "Les 2 Alpes",
+    "massif": "Alpes",
+    "lat": 45.003,
+    "lon": 6.122
+  },
+  {
+    "name": "Avoriaz",
+    "massif": "Alpes",
+    "lat": 46.192,
+    "lon": 6.777
+  },
+  {
+    "name": "Morzine",
+    "massif": "Alpes",
+    "lat": 46.18,
+    "lon": 6.707
+  },
+  {
+    "name": "Les Gets",
+    "massif": "Alpes",
+    "lat": 46.156,
+    "lon": 6.664
+  },
+  {
+    "name": "Flaine (Grand Massif)",
+    "massif": "Alpes",
+    "lat": 46.007,
+    "lon": 6.694
+  },
+  {
+    "name": "Samoëns (Grand Massif)",
+    "massif": "Alpes",
+    "lat": 46.082,
+    "lon": 6.726
+  },
+  {
+    "name": "Le Grand-Bornand",
+    "massif": "Alpes",
+    "lat": 45.942,
+    "lon": 6.427
+  },
+  {
+    "name": "Alpe d'Huez",
+    "massif": "Alpes",
+    "lat": 45.09,
+    "lon": 6.068
+  },
+  {
+    "name": "Val Thorens (3 Vallées)",
+    "massif": "Alpes",
+    "lat": 45.297,
+    "lon": 6.58
+  },
+  {
+    "name": "Tignes",
+    "massif": "Alpes",
+    "lat": 45.469,
+    "lon": 6.907
+  },
+  {
+    "name": "La Plagne (Paradiski)",
+    "massif": "Alpes",
+    "lat": 45.506,
+    "lon": 6.677
+  },
+  {
+    "name": "Chamonix",
+    "massif": "Alpes",
+    "lat": 45.924,
+    "lon": 6.869
+  },
+  {
+    "name": "Megève (Evasion Mont Blanc)",
+    "massif": "Alpes",
+    "lat": 45.857,
+    "lon": 6.617
+  },
+  {
+    "name": "Courchevel (3 Vallées)",
+    "massif": "Alpes",
+    "lat": 45.415,
+    "lon": 6.634
+  },
+  {
+    "name": "Les Arcs (Paradiski)",
+    "massif": "Alpes",
+    "lat": 45.572,
+    "lon": 6.827
+  },
+  {
+    "name": "Serre Chevalier",
+    "massif": "Alpes",
+    "lat": 44.948,
+    "lon": 6.579
+  },
+  {
+    "name": "Val d'Isère",
+    "massif": "Alpes",
+    "lat": 45.445739,
+    "lon": 6.977606
+  },
+  {
+    "name": "La Clusaz",
+    "massif": "Alpes",
+    "lat": 45.903722,
+    "lon": 6.423481
+  },
+  {
+    "name": "Alpe du Grand Serre",
+    "massif": "Alpes",
+    "lat": 45.023517,
+    "lon": 5.862517
+  },
+  {
+    "name": "Chamrousse",
+    "massif": "Alpes",
+    "lat": 45.109653,
+    "lon": 5.875792
+  },
+  {
+    "name": "Saint Sorlin d'Arves (Les Sybelles)",
+    "massif": "Alpes",
+    "lat": 45.218261,
+    "lon": 6.230328
+  },
+  {
+    "name": "Les Saisies (Espace Diamant)",
+    "massif": "Alpes",
+    "lat": 45.7588,
+    "lon": 6.535506
+  },
+  {
+    "name": "Valloire",
+    "massif": "Alpes",
+    "lat": 45.164497,
+    "lon": 6.430956
+  },
+  {
+    "name": "Val Cenis",
+    "massif": "Alpes",
+    "lat": 45.274581,
+    "lon": 6.816975
+  },
+  {
+    "name": "Montgenèvre",
+    "massif": "Alpes",
+    "lat": 44.929961,
+    "lon": 6.722583
+  },
+  {
+    "name": "Orcières",
+    "massif": "Alpes",
+    "lat": 44.697378,
+    "lon": 6.322239
+  },
+  {
+    "name": "Pralognan-la-Vanoise",
+    "massif": "Alpes",
+    "lat": 45.380867,
+    "lon": 6.722864
+  },
+  {
+    "name": "Valmorel",
+    "massif": "Alpes",
+    "lat": 45.459142,
+    "lon": 6.443286
+  },
+  {
+    "name": "Méribel (3 Vallées)",
+    "massif": "Alpes",
+    "lat": 45.391269,
+    "lon": 6.567644
+  },
+  {
+    "name": "Risoul",
+    "massif": "Alpes",
+    "lat": 44.621036,
+    "lon": 6.633803
+  },
+  {
+    "name": "La rosière",
+    "massif": "Alpes",
+    "lat": 45.628947,
+    "lon": 6.848758
+  },
+  {
+    "name": "Sainte-Foy-Tarentaise",
+    "massif": "Alpes",
+    "lat": 45.577272,
+    "lon": 6.893675
+  },
+  {
+    "name": "Peisey-Vallandry (Paradiski)",
+    "massif": "Alpes",
+    "lat": 45.551036,
+    "lon": 6.763722
+  },
+  {
+    "name": "Vars (Espace Forêt Blanche)",
+    "massif": "Alpes",
+    "lat": 44.572789,
+    "lon": 6.679261
+  },
+  {
+    "name": "Les Menuires (3 Vallées)",
+    "massif": "Alpes",
+    "lat": 45.323881,
+    "lon": 6.538708
+  },
+  {
+    "name": "Pra Loup",
+    "massif": "Alpes",
+    "lat": 44.368714,
+    "lon": 6.60125
+  },
+  {
+    "name": "Isola 2000",
+    "massif": "Alpes",
+    "lat": 44.183728,
+    "lon": 7.159794
+  },
+  {
+    "name": "Auron",
+    "massif": "Alpes",
+    "lat": 44.220353,
+    "lon": 6.925461
+  },
+  {
+    "name": "Les Contamines-Montjoie (Evasion Mont Blanc)",
+    "massif": "Alpes",
+    "lat": 45.802389,
+    "lon": 6.712131
+  },
+  {
+    "name": "Morillon (Grand Massif)",
+    "massif": "Alpes",
+    "lat": 46.065292,
+    "lon": 6.671522
+  },
+  {
+    "name": "Saint-Gervais-Mont-Blanc (Evasion Mont Blanc)",
+    "massif": "Alpes",
+    "lat": 45.874283,
+    "lon": 6.685378
+  },
+  {
+    "name": "Praz-sur-Arly (Espace Daiamant)",
+    "massif": "Alpes",
+    "lat": 45.833608,
+    "lon": 6.570992
+  },
+  {
+    "name": "Les Carroz (Grand Massif)",
+    "massif": "Alpes",
+    "lat": 46.024956,
+    "lon": 6.644792
+  },
+  {
+    "name": "7 Laux",
+    "massif": "Alpes",
+    "lat": 45.255914,
+    "lon": 5.99555
+  },
+  {
+    "name": "Oz 3300",
+    "massif": "Alpes",
+    "lat": 45.127533,
+    "lon": 6.070661
+  },
+  {
+    "name": "Les Karellis",
+    "massif": "Alpes",
+    "lat": 45.227811,
+    "lon": 6.404394
+  },
+  {
+    "name": "Villard de Lans/Corrençon",
+    "massif": "Alpes",
+    "lat": 45.042256,
+    "lon": 5.540147
+  },
+  {
+    "name": "Valmeinier",
+    "massif": "Alpes",
+    "lat": 45.182741,
+    "lon": 6.474148
+  },
+  {
+    "name": "La Grave",
+    "massif": "Alpes",
+    "lat": 45.025894,
+    "lon": 6.289076
+  },
+  {
+    "name": "Le Collet d'Allevard",
+    "massif": "Alpes",
+    "lat": 45.394805,
+    "lon": 6.110976
+  },
+  {
+    "name": "Grand Tourmalet (Barèges-La Mongie)",
+    "massif": "Pyrénées",
+    "lat": 42.909,
+    "lon": 0.142
+  },
+  {
+    "name": "Pas de la Case",
+    "massif": "Pyrénées",
+    "lat": 42.542,
+    "lon": 1.733
+  },
+  {
+    "name": "Peyragudes",
+    "massif": "Pyrénées",
+    "lat": 42.789864,
+    "lon": 0.446364
+  },
+  {
+    "name": "La Mongie (Barèges-La Mongie)",
+    "massif": "Pyrénées",
+    "lat": 42.909089,
+    "lon": 0.178592
+  },
+  {
+    "name": "Font-Romeu",
+    "massif": "Pyrénées",
+    "lat": 42.520483,
+    "lon": 2.033042
+  },
+  {
+    "name": "Cauterets",
+    "massif": "Pyrénées",
+    "lat": 42.884583,
+    "lon": -0.060642
+  },
+  {
+    "name": "Les Angles",
+    "massif": "Pyrénées",
+    "lat": 42.563733,
+    "lon": 2.065297
+  },
+  {
+    "name": "Piau Engaly",
+    "massif": "Pyrénées",
+    "lat": 42.783003,
+    "lon": 0.15835
+  },
+  {
+    "name": "Guzet",
+    "massif": "Pyrénées",
+    "lat": 42.778383,
+    "lon": 1.301042
+  },
+  {
+    "name": "Luchon-Superbagnères",
+    "massif": "Pyrénées",
+    "lat": 42.768233,
+    "lon": 0.577381
+  }
+]
