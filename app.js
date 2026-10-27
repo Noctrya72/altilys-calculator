@@ -74,10 +74,9 @@ function stationCandidates(point) {
 
 function initMap() {
   map = L.map("map", { scrollWheelZoom: true }).setView([45.4, 6.2], 7);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
-    subdomains: "abcd",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>'
   }).addTo(map);
   map.on("tileerror", () => {
     tileErrorCount += 1;
@@ -542,3 +541,82 @@ async function boot() {
 }
 
 document.addEventListener("DOMContentLoaded", boot, { once: true });
+
+
+// Convertisseur indépendant ajouté sans modifier le moteur de recherche des stations.
+function parseHemisphereCoordinates(raw) {
+  const matches = [...String(raw).matchAll(/([+-]?\d+(?:[.,]\d+)?)\s*°?\s*([NSEW])/gi)];
+  if (matches.length !== 2) {
+    throw new Error('Format non reconnu. Exemple attendu : 45.892693°N 6.782763°E');
+  }
+
+  let lat = null;
+  let lon = null;
+  for (const match of matches) {
+    const value = Math.abs(Number(match[1].replace(',', '.')));
+    const hemisphere = match[2].toUpperCase();
+    if (!Number.isFinite(value)) throw new Error('Une des coordonnées n’est pas un nombre valide.');
+    if (hemisphere === 'N' || hemisphere === 'S') {
+      if (lat !== null) throw new Error('Indique une seule latitude (N ou S) et une seule longitude (E ou W).');
+      lat = hemisphere === 'S' ? -value : value;
+    } else {
+      if (lon !== null) throw new Error('Indique une seule latitude (N ou S) et une seule longitude (E ou W).');
+      lon = hemisphere === 'W' ? -value : value;
+    }
+  }
+
+  if (lat === null || lon === null) throw new Error('Il faut une latitude N/S et une longitude E/W.');
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    throw new Error('Coordonnées hors limites : latitude entre 0 et 90°, longitude entre 0 et 180°.');
+  }
+  return { lat, lon };
+}
+
+function bootFormatConverter() {
+  const form = document.querySelector('#format-converter-form');
+  if (!form) return;
+  const input = document.querySelector('#hemisphere-input');
+  const status = document.querySelector('#format-status');
+  const result = document.querySelector('#format-result');
+  const output = document.querySelector('#formatted-coordinates');
+  const convertButton = document.querySelector('#format-convert-button');
+  const exampleButton = document.querySelector('#format-use-example');
+  const copyButton = document.querySelector('#format-copy-button');
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    try {
+      const point = parseHemisphereCoordinates(input.value);
+      const indentation = ' '.repeat(13);
+      output.textContent = `lat: ${point.lat.toFixed(6)},\n${indentation}lon: ${point.lon.toFixed(6)},`;
+      result.hidden = false;
+      status.textContent = 'Coordonnées converties. Le format avec indentation est prêt à copier.';
+      status.className = 'status success';
+    } catch (error) {
+      result.hidden = true;
+      status.textContent = error.message || 'Impossible de convertir ces coordonnées.';
+      status.className = 'status error';
+    }
+  });
+
+  exampleButton.addEventListener('click', () => {
+    input.value = '45.892693°N 6.782763°E';
+    form.requestSubmit();
+  });
+
+  copyButton.addEventListener('click', async () => {
+    const text = output.textContent;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      copyButton.textContent = 'Copié ✓';
+      window.setTimeout(() => { copyButton.textContent = 'Copier'; }, 1600);
+    } catch {
+      window.prompt('Copie ce texte :', text);
+    }
+  });
+
+  form.requestSubmit();
+}
+
+document.addEventListener('DOMContentLoaded', bootFormatConverter, { once: true });

@@ -27,4 +27,4 @@ Site statique HTML/CSS/JavaScript compatible avec GitHub Pages. L’interface et
 
 - Remontées et données cartographiques : © OpenStreetMap contributors, distribuées sous la licence ODbL.
 - Altitudes de terrain : Open-Meteo Elevation API / Copernicus DEM GLO-90.
-- Fond de carte : OpenTopoMap-R via OpenMaps (fond topographique, pratique en montagne), avec repli vers les tuiles OpenStreetMap standard si le premier fournisseur est indisponible. Attribution affichée sur la carte.
+- Fond de carte : tuiles standard OpenStreetMap.
