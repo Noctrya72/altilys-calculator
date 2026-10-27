@@ -1,28 +1,30 @@
-# Repère GPS — Stations de ski
+# Repère GPS — estimation du front de neige
 
-Petit site statique (HTML, CSS, JavaScript + JSON) destiné à GitHub Pages. Il accepte une seule ligne de coordonnées, cherche les stations du catalogue les plus proches, puis affiche un point de référence et propose les coordonnées à copier.
+Site statique HTML/CSS/JavaScript compatible avec GitHub Pages. L’interface et son style sont conservés ; le moteur calcule maintenant un centre estimé à partir des départs aval de remontées mécaniques.
 
 ## Publication sur GitHub Pages
 
-1. Télécharge et décompresse `repere-gps-stations-github-pages.zip`.
-2. Crée un dépôt GitHub public, par exemple `repere-gps-stations`.
-3. Téléverse à la racine du dépôt ces cinq fichiers : `index.html`, `styles.css`, `app.js`, `stations.json` et `README.md`.
-4. Ouvre **Settings → Pages**.
-5. Dans **Build and deployment**, sélectionne **Deploy from a branch**, puis `main` et `/(root)`.
-6. Enregistre et ouvre l’URL publiée par GitHub Pages.
+1. Décompresse le ZIP et envoie les cinq fichiers (`index.html`, `styles.css`, `app.js`, `stations.json`, `README.md`) à la racine d’un dépôt GitHub.
+2. Dans **Settings → Pages**, choisis **Deploy from a branch**, la branche `main` et le dossier `/(root)`.
+3. Ouvre l’URL publiée, colle une ligne comme `lat: 45.889, lon: 6.735`, puis clique sur **Identifier la station**.
 
-## Fonctionnement
+## Fonctionnement du calcul
 
-- Accepte par exemple `lat: 45.889, lon: 6.735`.
-- Calcule la distance géographique (formule de Haversine) à chaque station du catalogue.
-- Affiche les cinq stations les plus proches jusqu’à 45 km pour permettre de corriger un mauvais choix.
-- Quand les coordonnées du catalogue ont moins de cinq décimales, une recherche Nominatim (OpenStreetMap) est tentée afin de retrouver un point cartographique correspondant au nom de la station. Les résultats sont mis en cache en mémoire et les requêtes sont espacées pour limiter les appels au service public.
-- La carte utilise Leaflet et les tuiles standard OpenStreetMap. La carte nécessite Internet. Le serveur de tuiles peut ne pas fonctionner quand la page est ouverte avec `file://`; teste de préférence la version publiée sur GitHub Pages.
+1. L’outil cherche les remontées mécaniques OSM autour du point saisi. Il interroge d’abord un rayon de 12 km et élargit à 22 km lorsque peu de remontées sont trouvées.
+2. Pour chaque remontée, il récupère les deux nœuds d’extrémité. L’altitude provient du tag `ele` dans OpenStreetMap lorsqu’il existe ; sinon, le moteur interroge l’API Elevation d’Open-Meteo, basée sur Copernicus DEM GLO-90.
+3. Il estime l’extrémité aval d’après les altitudes, écarte les remontées dont la différence d’altitude ne permet pas de connaître le sens de manière suffisamment fiable, puis regroupe les départs aval proches géographiquement.
+4. Il retient le groupe bas le plus pertinent et calcule la moyenne des latitudes et longitudes de ses départs aval. La carte, la copie et les coordonnées à six décimales affichent ce centre.
+5. `stations.json` est facultatif pour le calcul : il sert seulement à proposer un nom de station et des suggestions. Une station absente du fichier est donc quand même recherchée directement dans OpenStreetMap.
 
-## Limite importante
+## Limites importantes
 
-On ne peut pas retrouver une coordonnée précise uniquement en ajoutant des décimales à une valeur arrondie. Le projet utilise donc un catalogue de référence et, si possible, une recherche cartographique. Le point choisi représente la référence associée à la station ; ce n’est pas nécessairement l’entrée de la station, le départ des remontées ou le centre de tout le domaine skiable. La coordonnée affichée à six décimales ne garantit pas une précision métrique si la donnée source est approximative.
+- Les tags OSM et les géométries de remontées ne sont pas toujours complets ou à jour. Les départs aval sont estimés à partir des extrémités des lignes de remontées cartographiées.
+- Quand un tag `ele` manque, l’API Open-Meteo utilise un modèle de terrain d’environ 90 m de résolution : il peut être incapable de distinguer deux extrémités proches en altitude. Le moteur préfère alors signaler le manque de données plutôt que produire une fausse précision.
+- Un résultat à six décimales est un format numérique, pas une garantie de précision métrique ou centimétrique. Vérifie le point sur la carte avant de l’utiliser comme référence exacte.
+- Le projet est entièrement côté navigateur, mais nécessite Internet pour les tuiles cartographiques, Overpass et les altitudes. Les instances publiques peuvent être temporairement indisponibles ou limitées.
 
-## Source des données
+## Données et attribution
 
-Le catalogue de stations a été extrait du fichier `window.alpelysStations` fourni pour le projet ALPÉLYS. Les positions peuvent être approximatives et doivent être vérifiées avant un usage exigeant une précision métrique. Les données OpenStreetMap sont attribuées à leurs contributeurs.
+- Remontées et données cartographiques : © OpenStreetMap contributors, distribuées sous la licence ODbL.
+- Altitudes de terrain : Open-Meteo Elevation API / Copernicus DEM GLO-90.
+- Fond de carte : CARTO (fond sombre) avec données OpenStreetMap.

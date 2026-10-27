@@ -20,7 +20,7 @@
     <section class="intro">
       <p class="eyebrow">COORDONNÉES APPROXIMATIVES → RÉFÉRENCE STATION</p>
       <h1>Retrouve le bon point GPS.</h1>
-      <p class="intro-copy">Colle une seule ligne de coordonnées. L’outil compare le point au catalogue de stations, identifie les stations les plus proches et propose leurs coordonnées de référence.</p>
+      <p class="intro-copy">Colle une seule ligne de coordonnées. L’outil recherche les remontées mécaniques autour du point, estime leurs extrémités aval grâce aux altitudes disponibles, puis calcule le centre du groupe de départs bas. Une station absente du catalogue peut tout de même être recherchée.</p>
     </section>
 
     <section class="search-card" aria-labelledby="search-title">
@@ -58,10 +58,35 @@
       <div class="map-footer"><span class="map-dot"></span><span id="map-caption">La carte affichera le point de référence de la station sélectionnée.</span><span class="attribution">© OpenStreetMap contributors</span></div>
     </section>
 
-    <section class="explanation">
-      <div class="info-icon">i</div><div><h3>Ce que fait réellement l’outil</h3><p>Il ne transforme pas mathématiquement une coordonnée arrondie en coordonnée exacte : il cherche la station la plus proche dans le catalogue, puis utilise ses coordonnées de référence. Si la donnée du catalogue est approximative, l’outil tente de la vérifier avec OpenStreetMap. Les décimales affichées ne garantissent pas à elles seules une précision de quelques centimètres.</p></div>
+
+
+    <section class="search-card format-converter" aria-labelledby="format-converter-title">
+      <div class="card-heading">
+        <div><span class="step">04</span><h2 id="format-converter-title">Convertir des coordonnées GPS</h2></div>
+        <span class="small-tag">Format texte</span>
+      </div>
+      <form id="format-converter-form">
+        <label for="hemisphere-input">Coordonnées avec les points cardinaux</label>
+        <div class="input-wrap">
+          <input id="hemisphere-input" name="hemisphere-coordinates" autocomplete="off" spellcheck="false" value="45.892693°N 6.782763°E" placeholder="45.892693°N 6.782763°E" required>
+          <button class="primary-btn" id="format-convert-button" type="submit"><span>Convertir</span><span aria-hidden="true">↗</span></button>
+        </div>
+        <div class="input-meta"><span>Exemple : <code>45.892693°N 6.782763°E</code></span><button id="format-use-example" type="button" class="text-btn">Charger l’exemple</button></div>
+      </form>
+      <div id="format-status" class="status" role="status" aria-live="polite">Saisis les coordonnées puis clique sur Convertir.</div>
+      <div id="format-result" class="format-result" hidden>
+        <div class="coordinate-output-heading">
+          <div><span class="output-label">FORMAT PRÊT À COPIER</span><p class="precision-note">Les deux lignes sont séparées, avec les virgules et l’indentation demandée.</p></div>
+          <button id="format-copy-button" class="copy-btn" type="button">Copier</button>
+        </div>
+        <pre id="formatted-coordinates" class="format-coordinate-output"></pre>
+      </div>
     </section>
-    <footer>Catalogue de stations adapté des données ALPÉLYS fournies · Les coordonnées peuvent désigner un point de référence de station, pas toute l’étendue du domaine skiable.</footer>
+
+    <section class="explanation">
+      <div class="info-icon">i</div><div><h3>Ce que fait réellement l’outil</h3><p>L’outil repère les remontées dans OpenStreetMap, estime l’altitude de leurs deux extrémités, retient les départs aval et calcule le centre du groupe bas retenu. Les altitudes peuvent venir des tags OSM ou du modèle numérique de terrain Copernicus GLO-90 via Open-Meteo (résolution d’environ 90 m). Si les données sont trop rares ou ambiguës, le calcul est refusé. Six décimales ne garantissent pas une précision de quelques centimètres.</p></div>
+    </section>
+    <footer>Remontées : OpenStreetMap contributors · Altitudes de terrain : Open-Meteo / Copernicus DEM GLO-90 · Le centre calculé est une estimation à vérifier sur le terrain ou sur une carte détaillée.</footer>
   </main>
 </body>
 </html>
