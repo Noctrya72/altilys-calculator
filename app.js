@@ -21,6 +21,12 @@ let analysisRunId = 0;
 let map = null;
 let mapMarker = null;
 let tileErrorCount = 0;
+let analysisLayer = null;
+let elevationMemoryCache = new Map();
+let lastAgentReport = null;
+const OVERPASS_CACHE_PREFIX = "repere-gps-overpass-v2:";
+const OVERPASS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const OVERPASS_CACHE_MAX_CHARS = 900000;
 
 function normalize(value) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -78,6 +84,7 @@ function initMap() {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>'
   }).addTo(map);
+  analysisLayer = L.layerGroup().addTo(map);
   map.on("tileerror", () => {
     tileErrorCount += 1;
     if (tileErrorCount >= 3) {
@@ -92,6 +99,7 @@ function escapeHtml(value) {
 
 function updateMap(point, name = "Front de neige estimé") {
   const lat = Number(point.lat), lon = Number(point.lon);
+  if (analysisLayer) analysisLayer.clearLayers();
   const title = `${name} — ${formatCoord(lat)}, ${formatCoord(lon)}`;
   if (mapMarker) map.removeLayer(mapMarker);
   mapMarker = L.marker([lat, lon]).addTo(map)
@@ -140,7 +148,53 @@ function makeOverpassQuery(point, radiusM) {
   return `[out:json][timeout:25];\n(\n way(around:${radiusM},${point.lat},${point.lon})["aerialway"~"^(${AERIALWAY_VALUES})$"];\n node(around:${radiusM},${point.lat},${point.lon})["aerialway"="station"];\n);\nout body;\n>;\nout body qt;`;
 }
 
+function overpassCacheKey(point, radiusM) {
+  return `${OVERPASS_CACHE_PREFIX}${radiusM}:${Number(point.lat).toFixed(4)}:${Number(point.lon).toFixed(4)}`;
+}
+
+function readOverpassCache(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (!cached || Date.now() - cached.savedAt > OVERPASS_CACHE_TTL_MS || !Array.isArray(cached.elements)) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return cached.elements;
+  } catch {
+    return null;
+  }
+}
+
+function writeOverpassCache(key, elements) {
+  try {
+    const serialized = JSON.stringify({ savedAt: Date.now(), elements });
+    // Large mountain areas may exceed browser storage quotas; in that case the app still works without persistence.
+    if (serialized.length > OVERPASS_CACHE_MAX_CHARS) return;
+    const oldKeys = [];
+    for (let index = 0; index < localStorage.length; index++) {
+      const candidate = localStorage.key(index);
+      if (candidate?.startsWith(OVERPASS_CACHE_PREFIX)) oldKeys.push(candidate);
+    }
+    // Keep the cache bounded and prefer recently saved entries.
+    if (oldKeys.length >= 4) {
+      oldKeys.slice(0, oldKeys.length - 3).forEach(oldKey => localStorage.removeItem(oldKey));
+    }
+    localStorage.setItem(key, serialized);
+  } catch {
+    // Private browsing, disabled storage, or a full quota must not prevent a search.
+  }
+}
+
 async function requestOverpass(point, radiusM) {
+  const key = overpassCacheKey(point, radiusM);
+  const cached = readOverpassCache(key);
+  if (cached) {
+    lastAgentReport?.events?.push(`Données cartographiques réutilisées depuis le cache (${Math.round(OVERPASS_CACHE_TTL_MS / 3600000)} h maximum).`);
+    return cached;
+  }
+
   const query = makeOverpassQuery(point, radiusM);
   let lastError = null;
   for (const endpoint of OVERPASS_ENDPOINTS) {
@@ -151,11 +205,15 @@ async function requestOverpass(point, radiusM) {
         body: new URLSearchParams({ data: query })
       }, 35000);
       if (!payload || !Array.isArray(payload.elements)) throw new Error("Réponse Overpass invalide");
+      writeOverpassCache(key, payload.elements);
       return payload.elements;
     } catch (error) {
       lastError = error;
       console.warn(`Overpass indisponible (${endpoint})`, error);
     }
+  }
+  if (lastError?.name === "AbortError") {
+    throw new Error("La recherche cartographique a dépassé le délai autorisé. Réessaie dans quelques instants.");
   }
   throw new Error("OpenStreetMap ne répond pas pour le moment. Réessaie dans quelques instants.");
 }
@@ -179,9 +237,20 @@ function distanceMeters(a, b) {
   return haversineKm(a.lat, a.lon, b.lat, b.lon) * 1000;
 }
 
+function getStationRole(node) {
+  const value = String(node?.tags?.["aerialway:station"] || "").trim().toLowerCase();
+  if (value === "bottom" || value === "lower") return "bottom";
+  if (value === "top" || value === "upper") return "top";
+  if (value === "mid" || value === "middle") return "mid";
+  return "unknown";
+}
+
 function collectLiftEndpoints(elements) {
   const nodesById = new Map(elements.filter(item => item.type === "node" && Number.isFinite(item.lat) && Number.isFinite(item.lon)).map(node => [node.id, node]));
-  const stationNodes = [...nodesById.values()].filter(node => node.tags?.aerialway === "station");
+  const stationNodes = [...nodesById.values()].filter(node => {
+    const role = String(node.tags?.["aerialway:station"] || "").toLowerCase();
+    return node.tags?.aerialway === "station" || ["bottom", "top", "lower", "upper", "mid", "middle"].includes(role);
+  });
   const ways = elements.filter(isLiftWay);
   const lifts = [];
   const endpointIds = new Set();
@@ -220,7 +289,8 @@ function collectLiftEndpoints(elements) {
       lon: Number(node.lon),
       elevation: ele,
       elevationSource: ele === null ? null : "OpenStreetMap (ele)",
-      tags: node.tags || {}
+      tags: node.tags || {},
+      stationRole: getStationRole(node)
     });
   }
   return { ways, lifts, endpoints };
@@ -228,8 +298,20 @@ function collectLiftEndpoints(elements) {
 
 async function fillMissingElevations(endpoints) {
   const missing = [...endpoints.values()].filter(node => node.elevation === null);
+  const uncached = [];
+  for (const node of missing) {
+    const key = `${node.lat.toFixed(5)},${node.lon.toFixed(5)}`;
+    const cached = elevationMemoryCache.get(key);
+    if (cached && Date.now() - cached.savedAt < 30 * 24 * 60 * 60 * 1000) {
+      node.elevation = cached.elevation;
+      node.elevationSource = "Open-Meteo / Copernicus GLO-90 (cache)";
+    } else {
+      uncached.push(node);
+    }
+  }
+
   const chunks = [];
-  for (let i = 0; i < missing.length; i += 100) chunks.push(missing.slice(i, i + 100));
+  for (let i = 0; i < uncached.length; i += 100) chunks.push(uncached.slice(i, i + 100));
   await Promise.all(chunks.map(async chunk => {
     const url = new URL(ELEVATION_URL);
     url.searchParams.set("latitude", chunk.map(node => node.lat.toFixed(6)).join(","));
@@ -242,6 +324,7 @@ async function fillMissingElevations(endpoints) {
         if (Number.isFinite(elevation)) {
           node.elevation = elevation;
           node.elevationSource = "Open-Meteo / Copernicus GLO-90";
+          elevationMemoryCache.set(`${node.lat.toFixed(5)},${node.lon.toFixed(5)}`, { elevation, savedAt: Date.now() });
         }
       });
     } catch (error) {
@@ -250,7 +333,7 @@ async function fillMissingElevations(endpoints) {
   }));
 }
 
-function clusterTerminals(terminals, maxDistanceKm = 1.5) {
+function clusterTerminals(terminals, maxDistanceKm = 0.75) {
   const parent = terminals.map((_, index) => index);
   const find = index => {
     while (parent[index] !== index) {
@@ -277,31 +360,142 @@ function clusterTerminals(terminals, maxDistanceKm = 1.5) {
   return [...groups.values()];
 }
 
+function deduplicateTerminalPositions(cluster, thresholdM = 45) {
+  const positions = [];
+  for (const terminal of cluster) {
+    let match = null;
+    let bestDistance = Infinity;
+    for (const position of positions) {
+      const distance = distanceMeters(terminal, position);
+      if (distance <= thresholdM && distance < bestDistance) {
+        match = position;
+        bestDistance = distance;
+      }
+    }
+    if (!match) {
+      positions.push({
+        lat: terminal.lat,
+        lon: terminal.lon,
+        elevation: terminal.elevation,
+        elevationSource: terminal.elevationSource,
+        nodeId: terminal.lowerNodeId,
+        explicitBottom: terminal.directionMethod === "balise bottom",
+        explicitDirection: terminal.explicitDirection,
+        directionMethods: [terminal.directionMethod],
+        liftIds: [terminal.liftId],
+        liftNames: [terminal.liftName],
+        rawTerminals: [terminal]
+      });
+    } else {
+      match.rawTerminals.push(terminal);
+      match.liftIds.push(terminal.liftId);
+      match.liftNames.push(terminal.liftName);
+      match.explicitBottom ||= terminal.directionMethod === "balise bottom";
+      match.explicitDirection ||= terminal.explicitDirection;
+      match.directionMethods.push(terminal.directionMethod);
+      if (terminal.elevation !== null && Number.isFinite(terminal.elevation)) {
+        const values = match.rawTerminals.map(item => item.elevation).filter(Number.isFinite);
+        match.elevation = values.reduce((sum, value) => sum + value, 0) / values.length;
+      }
+    }
+  }
+  return positions;
+}
+
 function summarizeCluster(cluster, inputPoint) {
-  const count = cluster.length;
-  const lat = cluster.reduce((sum, point) => sum + point.lat, 0) / count;
-  const lon = cluster.reduce((sum, point) => sum + point.lon, 0) / count;
-  const meanElevation = cluster.reduce((sum, point) => sum + point.elevation, 0) / count;
+  const positions = deduplicateTerminalPositions(cluster);
+  const count = positions.length;
+  const lat = positions.reduce((sum, point) => sum + point.lat, 0) / count;
+  const lon = positions.reduce((sum, point) => sum + point.lon, 0) / count;
+  const validElevations = positions.filter(point => Number.isFinite(point.elevation));
+  const meanElevation = validElevations.length
+    ? validElevations.reduce((sum, point) => sum + point.elevation, 0) / validElevations.length
+    : null;
   let totalPairDistance = 0, pairCount = 0, maxSpreadKm = 0;
-  for (let i = 0; i < cluster.length; i++) {
-    for (let j = i + 1; j < cluster.length; j++) {
-      const d = haversineKm(cluster[i].lat, cluster[i].lon, cluster[j].lat, cluster[j].lon);
+  for (let i = 0; i < positions.length; i++) {
+    for (let j = i + 1; j < positions.length; j++) {
+      const d = haversineKm(positions[i].lat, positions[i].lon, positions[j].lat, positions[j].lon);
       totalPairDistance += d;
       pairCount += 1;
       maxSpreadKm = Math.max(maxSpreadKm, d);
     }
   }
-  const sources = new Set(cluster.map(point => point.elevationSource));
+  const uniqueLiftIds = new Set(cluster.map(point => point.liftId));
+  const explicitBottomCount = positions.filter(point => point.explicitBottom).length;
+  const explicitDirectionCount = positions.filter(point => point.explicitDirection).length;
+  const osmElevationCount = positions.filter(point => point.rawTerminals.some(t => t.elevationSource === "OpenStreetMap (ele)")).length;
+  const demElevationCount = positions.filter(point => point.rawTerminals.some(t => String(t.elevationSource || "").includes("Copernicus GLO-90"))).length;
+  const sources = new Set(cluster.map(point => point.elevationSource).filter(Boolean));
   return {
-    lat, lon,
+    lat,
+    lon,
     meanElevation,
     count,
+    liftCount: uniqueLiftIds.size,
+    explicitBottomCount,
+    explicitDirectionCount,
+    osmElevationCount,
+    demElevationCount,
     averagePairDistanceM: pairCount ? (totalPairDistance / pairCount) * 1000 : 0,
     maxSpreadKm,
     distanceFromInputKm: haversineKm(inputPoint.lat, inputPoint.lon, lat, lon),
     elevationSources: [...sources],
-    terminals: cluster
+    terminals: cluster,
+    positions
   };
+}
+
+function scoreCluster(candidate, allCandidates) {
+  // Score explicable, pas une probabilité statistique. Le point saisi est supposé proche de la zone recherchée.
+  const support = Math.min(Math.max(0, (candidate.count - 1) / 3), 1) * 28;
+  const proximity = Math.max(0, 1 - candidate.distanceFromInputKm / 24) * 24;
+  const cohesion = Math.max(0, 1 - candidate.maxSpreadKm / 3) * 14;
+  const bottomRatio = candidate.count ? candidate.explicitBottomCount / candidate.count : 0;
+  const directionRatio = candidate.count ? candidate.explicitDirectionCount / candidate.count : 0;
+  const directionEvidence = Math.min(1, bottomRatio + Math.max(0, directionRatio - bottomRatio) * 0.65);
+  const tagEvidence = directionEvidence * 19;
+  const sourceRatio = candidate.count ? (candidate.osmElevationCount + candidate.demElevationCount * 0.5) / candidate.count : 0;
+  const elevationEvidence = Math.min(1, sourceRatio) * 7;
+  const altitudes = allCandidates.map(item => item.meanElevation).filter(Number.isFinite);
+  let altitudeEvidence = 0;
+  if (Number.isFinite(candidate.meanElevation) && altitudes.length) {
+    const minimum = Math.min(...altitudes);
+    const maximum = Math.max(...altitudes);
+    // L'altitude sert de critère secondaire : le groupe le plus bas n'est pas forcément le secteur recherché.
+    altitudeEvidence = maximum - minimum >= 10
+      ? ((maximum - candidate.meanElevation) / (maximum - minimum)) * 8
+      : 4;
+  }
+  const score = Math.round(Math.min(100, support + proximity + cohesion + tagEvidence + elevationEvidence + altitudeEvidence));
+  return {
+    ...candidate,
+    score,
+    scoreBreakdown: {
+      support: Math.round(support),
+      proximity: Math.round(proximity),
+      cohesion: Math.round(cohesion),
+      explicitTags: Math.round(tagEvidence),
+      elevationData: Math.round(elevationEvidence),
+      altitudeComparison: Math.round(altitudeEvidence)
+    }
+  };
+}
+
+function explainCandidate(candidate, allCandidates) {
+  const bestCount = Math.max(...allCandidates.map(item => item.count));
+  const statements = [];
+  if (candidate.explicitBottomCount > 0) {
+    statements.push(`${candidate.explicitBottomCount} terminal(s) porte(nt) la balise OSM explicite « bottom »`);
+  } else if (candidate.explicitDirectionCount > 0) {
+    statements.push(`${candidate.explicitDirectionCount} direction(s) déduite(s) d'une balise OSM « top » opposée`);
+  } else {
+    statements.push("le sens aval est déduit des altitudes, sans balise bottom explicite");
+  }
+  statements.push(`${candidate.count} position(s) de terminal distincte(s) soutenue(s) par ${candidate.liftCount} remontée(s)`);
+  statements.push(`centre à ${formatNumber(candidate.distanceFromInputKm, 1)} km du point d’analyse`);
+  if (candidate.maxSpreadKm > 1.5) statements.push(`dispersion étendue (${formatNumber(candidate.maxSpreadKm, 2)} km), à surveiller`);
+  if (candidate.count < bestCount) statements.push("moins de terminaux que le groupe le plus fourni");
+  return statements.join(" ; ") + ".";
 }
 
 async function computeFront(elements, inputPoint, radiusM) {
@@ -311,59 +505,111 @@ async function computeFront(elements, inputPoint, radiusM) {
 
   const terminals = [];
   let rejectedForElevation = 0;
+  let explicitBottomFound = 0;
+  let elevationInferredFound = 0;
   for (const lift of lifts) {
     const a = endpoints.get(lift.firstId), b = endpoints.get(lift.lastId);
-    if (!a || !b || !Number.isFinite(a.elevation) || !Number.isFinite(b.elevation)) { rejectedForElevation++; continue; }
+    if (!a || !b) continue;
+
     const distanceA = haversineKm(inputPoint.lat, inputPoint.lon, a.lat, a.lon);
     const distanceB = haversineKm(inputPoint.lat, inputPoint.lon, b.lat, b.lon);
-    const lower = a.elevation <= b.elevation ? a : b;
-    const higher = lower.id === a.id ? b : a;
-    if (haversineKm(inputPoint.lat, inputPoint.lon, lower.lat, lower.lon) > Math.min(MAX_TERMINAL_DISTANCE_KM, radiusM / 1000 + 2)) continue;
+    if (Math.min(distanceA, distanceB) > Math.min(MAX_TERMINAL_DISTANCE_KM, radiusM / 1000 + 2)) continue;
 
-    const elevationDifference = Math.abs(a.elevation - b.elevation);
-    const bothOsmElevations = a.elevationSource === "OpenStreetMap (ele)" && b.elevationSource === "OpenStreetMap (ele)";
-    // DEM resolution is ~90 m: tiny differences from it are not enough to know which end is downhill.
-    if (elevationDifference < (bothOsmElevations ? 3 : 18)) { rejectedForElevation++; continue; }
+    const roleA = a.stationRole || getStationRole(a);
+    const roleB = b.stationRole || getStationRole(b);
+    let lower = null;
+    let higher = null;
+    let directionMethod = "altitude";
+    let explicitDirection = false;
 
+    // Priorité aux balises déclarées dans OpenStreetMap : elles sont plus utiles que le DEM grossier.
+    if (roleA === "bottom" && roleB !== "bottom") {
+      lower = a; higher = b; directionMethod = "balise bottom"; explicitDirection = true;
+    } else if (roleB === "bottom" && roleA !== "bottom") {
+      lower = b; higher = a; directionMethod = "balise bottom"; explicitDirection = true;
+    } else if (roleA === "top" && roleB !== "top" && roleB !== "mid") {
+      lower = b; higher = a; directionMethod = "opposé balise top"; explicitDirection = true;
+    } else if (roleB === "top" && roleA !== "top" && roleA !== "mid") {
+      lower = a; higher = b; directionMethod = "opposé balise top"; explicitDirection = true;
+    } else {
+      if (!Number.isFinite(a.elevation) || !Number.isFinite(b.elevation)) { rejectedForElevation++; continue; }
+      lower = a.elevation <= b.elevation ? a : b;
+      higher = lower.id === a.id ? b : a;
+      const elevationDifference = Math.abs(a.elevation - b.elevation);
+      const bothOsmElevations = a.elevationSource === "OpenStreetMap (ele)" && b.elevationSource === "OpenStreetMap (ele)";
+      // GLO-90 has ~90 m resolution; small differences are not considered a reliable direction signal.
+      if (elevationDifference < (bothOsmElevations ? 3 : 18)) { rejectedForElevation++; continue; }
+      elevationInferredFound++;
+    }
+
+    if (!Number.isFinite(lower.elevation) && !explicitDirection) { rejectedForElevation++; continue; }
+    if (directionMethod === "balise bottom") explicitBottomFound++;
+    const elevationDifference = Number.isFinite(lower.elevation) && Number.isFinite(higher.elevation)
+      ? Math.abs(lower.elevation - higher.elevation)
+      : null;
     terminals.push({
       lat: lower.lat,
       lon: lower.lon,
-      elevation: lower.elevation,
+      elevation: Number.isFinite(lower.elevation) ? lower.elevation : null,
       elevationSource: lower.elevationSource,
+      lowerNodeId: lower.id,
       liftId: lift.id,
       liftName: lift.name,
       liftType: lift.type,
       elevationDifference,
-      otherEndElevation: higher.elevation,
-      distanceFromInputKm: Math.min(distanceA, distanceB)
+      otherEndElevation: Number.isFinite(higher.elevation) ? higher.elevation : null,
+      distanceFromInputKm: Math.min(distanceA, distanceB),
+      directionMethod,
+      explicitDirection,
+      stationRole: lower.stationRole || "unknown"
     });
   }
 
   if (!terminals.length) {
-    const suffix = rejectedForElevation ? " Les altitudes disponibles ne permettent pas de déterminer de façon fiable l’extrémité aval." : "";
-    throw new Error("Les remontées ont été trouvées, mais leurs altitudes sont insuffisantes pour calculer le front de neige." + suffix);
+    const suffix = rejectedForElevation ? " Les altitudes et les balises disponibles ne permettent pas de déterminer assez sûrement les extrémités aval." : "";
+    throw new Error("Les remontées ont été trouvées, mais les données sont insuffisantes pour calculer le front de neige." + suffix);
   }
 
-  const clusters = clusterTerminals(terminals).map(cluster => summarizeCluster(cluster, inputPoint));
-  // Ignore isolated low outliers when a cluster of two or more lower terminals is available.
-  const multiTerminalClusters = clusters.filter(cluster => cluster.count >= 2);
-  const usableClusters = multiTerminalClusters.length ? multiTerminalClusters : clusters;
-  usableClusters.sort((a, b) => {
-    const altitudeDifference = a.meanElevation - b.meanElevation;
-    if (Math.abs(altitudeDifference) >= 30) return altitudeDifference;
-    if (b.count !== a.count) return b.count - a.count;
-    return a.distanceFromInputKm - b.distanceFromInputKm;
-  });
-  const best = usableClusters[0];
-  if (best.distanceFromInputKm > MAX_TERMINAL_DISTANCE_KM) throw new Error("Les remontées trouvées sont trop éloignées du point saisi pour confirmer le domaine.");
+  const rawClusters = clusterTerminals(terminals).map(cluster => summarizeCluster(cluster, inputPoint));
+  const allScored = rawClusters.map(candidate => scoreCluster(candidate, rawClusters)).sort((a, b) => b.score - a.score || a.distanceFromInputKm - b.distanceFromInputKm || b.count - a.count || (a.meanElevation ?? Infinity) - (b.meanElevation ?? Infinity));
+  // A solitary terminal must not beat a coherent multi-terminal group merely because it carries one explicit tag.
+  const corroborated = allScored.filter(candidate => candidate.count >= 2);
+  const scored = corroborated.length ? [...corroborated, ...allScored.filter(candidate => candidate.count < 2)] : allScored;
+  const best = scored[0];
+  if (!best || best.distanceFromInputKm > MAX_TERMINAL_DISTANCE_KM) {
+    throw new Error("Les remontées trouvées sont trop éloignées du point saisi pour confirmer le domaine.");
+  }
+
+  const confidence = best.score >= 78 && best.count >= 3
+    ? "Forte convergence d'indices"
+    : best.score >= 58 && best.count >= 2
+      ? "Estimation plausible"
+      : "À vérifier sur la carte";
+  const selectionReason = explainCandidate(best, scored);
+  const agentEvents = [
+    `${ways.length} géométrie(s) de remontée(s) trouvée(s) dans le rayon de ${Math.round(radiusM / 1000)} km.`,
+    `${terminals.length} extrémité(s) aval candidate(s) retenue(s), dont ${explicitBottomFound} grâce à la balise bottom et ${elevationInferredFound} orientée(s) par les altitudes.`,
+    `${scored.length} groupe(s) géographique(s) comparé(s).`,
+    `Le groupe sélectionné obtient ${best.score}/100 selon un score heuristique explicable, pas une probabilité statistique.`,
+    `Répartition : soutien ${best.scoreBreakdown.support}/28 ; proximité ${best.scoreBreakdown.proximity}/24 ; cohésion ${best.scoreBreakdown.cohesion}/14 ; balises explicites ${best.scoreBreakdown.explicitTags}/19 ; qualité des altitudes ${best.scoreBreakdown.elevationData}/7 ; comparaison des altitudes ${best.scoreBreakdown.altitudeComparison}/8.`,
+    selectionReason
+  ];
 
   return {
     ...best,
+    score: best.score,
+    confidence,
+    selectionReason,
+    clusterCandidates: scored.slice(0, 6),
     liftWaysFound: ways.length,
     lowerTerminalsFound: terminals.length,
     rejectedForElevation,
+    explicitBottomFound,
+    elevationInferredFound,
     radiusM,
-    usedDem: best.elevationSources.some(source => source === "Open-Meteo / Copernicus GLO-90")
+    usedDem: best.elevationSources.some(source => String(source).includes("Copernicus GLO-90")),
+    agentEvents: [...(lastAgentReport?.events || []), ...agentEvents],
+    uniquePositions: best.positions
   };
 }
 
@@ -383,6 +629,75 @@ async function analyzeAround(anchor) {
   return computeFront(elements, anchor, radiusUsed);
 }
 
+function drawAnalysisEvidence(result, inputPoint) {
+  if (!map || !analysisLayer) return;
+  const selected = result.clusterCandidates?.[0] || result;
+  const candidates = result.clusterCandidates || [result];
+  const inputIsSeparate = inputPoint && haversineKm(inputPoint.lat, inputPoint.lon, result.lat, result.lon) > 0.03;
+  if (inputIsSeparate) {
+    L.circleMarker([inputPoint.lat, inputPoint.lon], {
+      radius: 7, color: "#8eb8ff", weight: 2, fillColor: "#152d50", fillOpacity: 0.95
+    }).addTo(analysisLayer).bindPopup(`<strong>Point initial saisi</strong><br>${formatCoord(inputPoint.lat)}, ${formatCoord(inputPoint.lon)}`);
+  }
+
+  // Selected terminal positions are shown separately from the computed centre.
+  (selected.positions || []).forEach(position => {
+    const method = position.explicitBottom ? "Balise bottom explicite" : position.explicitDirection ? "Direction appuyée par une balise top" : "Direction déduite de l'altitude";
+    const names = [...new Set(position.liftNames || [])].slice(0, 4).join(", ") || "Remontée sans nom";
+    L.circleMarker([position.lat, position.lon], {
+      radius: 6, color: "#76e2d0", weight: 2, fillColor: "#123b38", fillOpacity: 0.95
+    }).addTo(analysisLayer).bindPopup(`<strong>Terminal aval candidat</strong><br>${escapeHtml(method)}<br>${escapeHtml(names)}<br>${formatCoord(position.lat)}, ${formatCoord(position.lon)}${Number.isFinite(position.elevation) ? `<br>Altitude : ${formatNumber(position.elevation)} m` : "<br>Altitude indisponible"}`);
+  });
+
+  candidates.slice(1, 6).forEach((candidate, index) => {
+    L.circleMarker([candidate.lat, candidate.lon], {
+      radius: 7, color: "#f3bd66", weight: 2, fillColor: "#47351c", fillOpacity: 0.85
+    }).addTo(analysisLayer).bindPopup(`<strong>Autre groupe candidat n°${index + 2}</strong><br>Score : ${candidate.score}/100<br>${candidate.count} terminal(aux), ${formatNumber(candidate.distanceFromInputKm, 1)} km du point d’analyse<br>${formatCoord(candidate.lat)}, ${formatCoord(candidate.lon)}`);
+  });
+  const bounds = [[result.lat, result.lon], ...(selected.positions || []).map(point => [point.lat, point.lon])];
+  if (inputIsSeparate) bounds.push([inputPoint.lat, inputPoint.lon]);
+  if (bounds.length > 1) {
+    try { map.fitBounds(bounds, { padding: [36, 36], maxZoom: 15 }); } catch { /* The selected center remains visible. */ }
+  }
+}
+
+function renderAgentReport(result) {
+  const section = $("#agent-report");
+  if (!section) return;
+  section.hidden = false;
+  $("#agent-score").textContent = `${result.score}/100`;
+  $("#agent-confidence").textContent = result.confidence || "À vérifier sur la carte";
+  $("#agent-summary").textContent = result.selectionReason || "Le groupe a été choisi à partir des données disponibles.";
+
+  const events = $("#agent-events");
+  events.replaceChildren();
+  (result.agentEvents || []).forEach(eventText => {
+    const item = document.createElement("li");
+    item.textContent = eventText;
+    events.append(item);
+  });
+
+  const candidates = $("#agent-candidates");
+  candidates.replaceChildren();
+  (result.clusterCandidates || []).slice(0, 5).forEach((candidate, index) => {
+    const item = document.createElement("article");
+    item.className = "agent-candidate" + (index === 0 ? " selected" : "");
+    const heading = document.createElement("div");
+    heading.className = "agent-candidate-heading";
+    const title = document.createElement("strong");
+    title.textContent = index === 0 ? "Groupe sélectionné" : `Alternative ${index + 1}`;
+    const score = document.createElement("span");
+    score.textContent = `${candidate.score}/100`;
+    heading.append(title, score);
+    const details = document.createElement("p");
+    details.textContent = `${candidate.count} terminal(aux) distinct(s) · ${candidate.liftCount} remontée(s) · ${formatNumber(candidate.distanceFromInputKm, 1)} km du point d’analyse${Number.isFinite(candidate.meanElevation) ? ` · altitude moyenne ${formatNumber(candidate.meanElevation)} m` : " · altitude inconnue"}`;
+    const coordinates = document.createElement("code");
+    coordinates.textContent = `${formatCoord(candidate.lat)}, ${formatCoord(candidate.lon)}`;
+    item.append(heading, details, coordinates);
+    candidates.append(item);
+  });
+}
+
 function displayResult(result, labelStation, inputPoint, analysisAnchor) {
   currentResult = result;
   const stationName = labelStation?.name || "Front de neige estimé";
@@ -392,12 +707,12 @@ function displayResult(result, labelStation, inputPoint, analysisAnchor) {
   $("#station-name").textContent = stationName;
 
   const confidence = $("#confidence");
-  if (result.count >= 4 && result.maxSpreadKm <= 1.5) {
-    confidence.textContent = "Groupe cohérent";
+  if (result.score >= 78 && result.count >= 3 && result.maxSpreadKm <= 2.5) {
+    confidence.textContent = "Indices convergents";
     confidence.style.color = "var(--accent)";
     confidence.style.borderColor = "#2a5e59";
     confidence.style.background = "#12332f";
-  } else if (result.count >= 2) {
+  } else if (result.score >= 58 && result.count >= 2) {
     confidence.textContent = "Estimation plausible";
     confidence.style.color = "var(--blue)";
     confidence.style.borderColor = "#365a83";
@@ -409,32 +724,40 @@ function displayResult(result, labelStation, inputPoint, analysisAnchor) {
     confidence.style.background = "#361e28";
   }
 
-  $("#station-distance").textContent = `${result.count} départ${result.count > 1 ? "s aval regroupés" : " aval identifié"} · altitude moyenne ${formatNumber(result.meanElevation)} m`;
+  $("#station-distance").textContent = `${result.count} position${result.count > 1 ? "s de terminal aval distinctes" : " de terminal aval distincte"} · ${result.liftCount} remontée(s) associée(s)${Number.isFinite(result.meanElevation) ? ` · altitude moyenne ${formatNumber(result.meanElevation)} m` : " · altitude moyenne indisponible"}`;
   $("#output-lat").textContent = formatCoord(result.lat);
   $("#output-lon").textContent = formatCoord(result.lon);
   $("#precision-note").textContent = result.count >= 2
-    ? `Centre calculé à partir de ${result.count} départs aval de remontées.`
-    : "Un seul départ aval exploitable : contrôle manuel recommandé.";
+    ? `Centre calculé à partir de ${result.count} positions distinctes, choisies automatiquement.`
+    : "Un seul terminal aval exploitable : contrôle manuel indispensable.";
 
   const averageDistance = formatNumber(result.averagePairDistanceM, 0);
   const spread = formatNumber(result.maxSpreadKm * 1000, 0);
-  const sourceLabel = result.usedDem ? "altitudes OSM complétées par le modèle de terrain Copernicus GLO-90 (résolution 90 m)" : "altitudes taguées dans OpenStreetMap";
+  const sourceLabel = result.elevationSources.some(source => String(source).includes("Copernicus GLO-90"))
+    ? "altitudes OSM et/ou modèle de terrain Copernicus GLO-90 (résolution 90 m)"
+    : result.elevationSources.includes("OpenStreetMap (ele)")
+      ? "altitudes taguées dans OpenStreetMap"
+      : "balises OSM de position du terminal, sans altitude fiable pour tous les points";
   const fallbackNote = analysisAnchor && haversineKm(inputPoint.lat, inputPoint.lon, analysisAnchor.lat, analysisAnchor.lon) > 0.2
     ? ` Analyse centrée sur un point de référence voisin (${formatNumber(haversineKm(inputPoint.lat, inputPoint.lon, analysisAnchor.lat, analysisAnchor.lon), 1)} km du point saisi).`
     : "";
-  $("#source-note").textContent = `Source : remontées OpenStreetMap ; ${sourceLabel}. Altitude moyenne des extrémités retenues : ${formatNumber(result.meanElevation)} m. Distance moyenne entre départs aval : ${averageDistance} m ; dispersion maximale : ${spread} m.${fallbackNote} Les six décimales sont un format d’affichage, pas une garantie de précision centimétrique.`;
+  $("#source-note").textContent = `Source : remontées OpenStreetMap ; ${sourceLabel}. ${Number.isFinite(result.meanElevation) ? `Altitude moyenne : ${formatNumber(result.meanElevation)} m. ` : "Aucune altitude moyenne fiable disponible. "}Distance moyenne entre terminaux : ${averageDistance} m ; dispersion maximale : ${spread} m.${fallbackNote} Score ${result.score}/100 : indicateur heuristique, pas une probabilité. Les six décimales sont un format d’affichage, pas une garantie de précision centimétrique.`;
   updateMap(result, stationName);
+  drawAnalysisEvidence(result, inputPoint);
   renderAlternatives();
+  renderAgentReport(result);
 }
 
 async function runAnalysis(primaryPoint, labelStation, fallbackStation = null) {
   const thisRun = ++analysisRunId;
   currentResult = null;
+  lastAgentReport = { events: [] };
   const analysisAnchor = { lat: primaryPoint.lat, lon: primaryPoint.lon };
   $("#result-section").hidden = true;
+  if ($("#agent-report")) $("#agent-report").hidden = true;
   selectedStation = labelStation || null;
   renderAlternatives();
-  setStatus("Recherche des remontées mécaniques et estimation des altitudes aval…");
+  setStatus("Agent géographique : recherche des remontées, analyse des terminaux et comparaison des groupes…");
   updateMap({ lat: primaryPoint.lat, lon: primaryPoint.lon }, "Point saisi");
 
   let result = null;
@@ -463,6 +786,7 @@ async function runAnalysis(primaryPoint, labelStation, fallbackStation = null) {
   if (thisRun !== analysisRunId) return;
   if (!result) {
     $("#result-section").hidden = true;
+    if ($("#agent-report")) $("#agent-report").hidden = true;
     updateMap({ lat: primaryPoint.lat, lon: primaryPoint.lon }, "Point saisi — résultat non confirmé");
     setStatus(firstError?.message || "Impossible d’estimer le front de neige avec les données disponibles. Vérifie les coordonnées et réessaie.", "error");
     return;
@@ -470,7 +794,7 @@ async function runAnalysis(primaryPoint, labelStation, fallbackStation = null) {
 
   displayResult(result, labelStation, primaryPoint, successfulAnchor);
   const confidenceText = result.count >= 3 ? "résultat basé sur plusieurs remontées" : "résultat à vérifier, peu de remontées exploitables";
-  setStatus(`Front de neige estimé : ${labelStation?.name || "domaine détecté directement"}. ${confidenceText}.`, result.count >= 2 ? "success" : "error");
+  setStatus(`Analyse autonome terminée : ${labelStation?.name || "domaine détecté directement"}. ${confidenceText}. Score heuristique : ${result.score}/100 ; vérification cartographique recommandée.`, result.score >= 58 && result.count >= 2 ? "success" : "error");
 }
 
 async function handleSearch(event) {
@@ -567,7 +891,7 @@ function parseHemisphereCoordinates(raw) {
 
   if (lat === null || lon === null) throw new Error('Il faut une latitude N/S et une longitude E/W.');
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-    throw new Error('Coordonnées hors limites : latitude entre 0 et 90°, longitude entre 0 et 180°.');
+    throw new Error('Coordonnées hors limites : latitude entre -90 et 90°, longitude entre -180 et 180°.');
   }
   return { lat, lon };
 }
@@ -579,7 +903,6 @@ function bootFormatConverter() {
   const status = document.querySelector('#format-status');
   const result = document.querySelector('#format-result');
   const output = document.querySelector('#formatted-coordinates');
-  const convertButton = document.querySelector('#format-convert-button');
   const exampleButton = document.querySelector('#format-use-example');
   const copyButton = document.querySelector('#format-copy-button');
 
@@ -587,7 +910,7 @@ function bootFormatConverter() {
     event.preventDefault();
     try {
       const point = parseHemisphereCoordinates(input.value);
-      const indentation = ' '.repeat(13);
+      const indentation = ' '.repeat(12);
       output.textContent = `lat: ${point.lat.toFixed(6)},\n${indentation}lon: ${point.lon.toFixed(6)},`;
       result.hidden = false;
       status.textContent = 'Coordonnées converties. Le format avec indentation est prêt à copier.';

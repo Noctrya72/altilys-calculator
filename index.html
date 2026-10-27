@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1b2d">
-  <meta name="description" content="Retrouve la station de ski correspondant à des coordonnées GPS approximatives et récupère ses coordonnées de référence.">
-  <title>Repère GPS — Stations de ski</title>
+  <meta name="description" content="Agent géographique autonome pour estimer un front de neige depuis des coordonnées GPS et les données ouvertes des remontées mécaniques.">
+  <title>Repère GPS — Agent géographique autonome</title>
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -20,7 +20,7 @@
     <section class="intro">
       <p class="eyebrow">COORDONNÉES APPROXIMATIVES → RÉFÉRENCE STATION</p>
       <h1>Retrouve le bon point GPS.</h1>
-      <p class="intro-copy">Colle une seule ligne de coordonnées. L’outil recherche les remontées mécaniques autour du point, estime leurs extrémités aval grâce aux altitudes disponibles, puis calcule le centre du groupe de départs bas. Une station absente du catalogue peut tout de même être recherchée.</p>
+      <p class="intro-copy">Colle une seule ligne de coordonnées. L’agent géographique recherche les remontées mécaniques, identifie les terminaux aval, compare plusieurs groupes candidats et choisit automatiquement le point le mieux étayé. Une station absente du catalogue peut tout de même être recherchée.</p>
     </section>
 
     <section class="search-card" aria-labelledby="search-title">
@@ -30,7 +30,7 @@
       </div>
       <form id="coordinate-form">
         <label for="coordinate-input">Latitude et longitude</label>
-        <div class="input-wrap"><input id="coordinate-input" name="coordinates" autocomplete="off" spellcheck="false" value="lat: 45.889, lon: 6.735" placeholder="lat: 45.889, lon: 6.735" required><button class="primary-btn" id="search-button" type="submit"><span>Identifier la station</span><span aria-hidden="true">↗</span></button></div>
+        <div class="input-wrap"><input id="coordinate-input" name="coordinates" autocomplete="off" spellcheck="false" value="lat: 45.889, lon: 6.735" placeholder="lat: 45.889, lon: 6.735" required><button class="primary-btn" id="search-button" type="submit"><span>Lancer l’analyse autonome</span><span aria-hidden="true">↗</span></button></div>
         <div class="input-meta"><span>Exemple : <code>lat: 45.889, lon: 6.735</code></span><button id="use-example" type="button" class="text-btn">Charger un exemple</button></div>
       </form>
       <div id="status" class="status" role="status" aria-live="polite">Prêt à analyser les coordonnées.</div>
@@ -39,7 +39,7 @@
     <section id="result-section" class="result-section" hidden>
       <div class="result-card">
         <div class="card-heading">
-          <div><span class="step">02</span><h2>Station reconnue</h2></div>
+          <div><span class="step">02</span><h2>Résultat de l’analyse</h2></div>
           <span id="confidence" class="confidence">Correspondance</span>
         </div>
         <div class="station-title-row"><div><p id="station-massif" class="station-massif"></p><h3 id="station-name">—</h3><p id="station-distance" class="distance"></p></div><a id="osm-link" class="outline-btn" target="_blank" rel="noopener noreferrer">Voir sur OSM ↗</a></div>
@@ -50,12 +50,33 @@
         </div>
         <div class="alternatives-wrap"><div class="alternatives-header"><h4>Autres stations proches</h4><span>Choisis si la première n’est pas la bonne</span></div><div id="alternatives" class="alternatives"></div></div>
       </div>
+      <section id="agent-report" class="agent-report" hidden aria-labelledby="agent-report-title">
+        <div class="agent-report-top">
+          <div>
+            <span class="step">AGENT AUTONOME</span>
+            <h2 id="agent-report-title">Pourquoi ce point a été choisi</h2>
+            <p id="agent-summary" class="agent-summary"></p>
+          </div>
+          <div class="agent-score-block"><strong id="agent-score">—/100</strong><span id="agent-confidence">À vérifier sur la carte</span></div>
+        </div>
+        <div class="agent-report-grid">
+          <div class="agent-method-card">
+            <h3>Étapes de l’analyse</h3>
+            <ol id="agent-events" class="agent-events"></ol>
+          </div>
+          <div class="agent-method-card">
+            <h3>Groupes comparés</h3>
+            <div id="agent-candidates" class="agent-candidates"></div>
+          </div>
+        </div>
+        <p class="agent-disclaimer">Cet agent est autonome mais ne s’appuie pas sur un modèle génératif : il applique un classement géographique explicable. Le score est heuristique, pas une probabilité de justesse. Les données OSM peuvent être incomplètes ; vérifie toujours le point sur la carte.</p>
+      </section>
     </section>
 
     <section class="map-card">
       <div class="card-heading map-heading"><div><span class="step">03</span><h2>Emplacement sur la carte</h2></div><a id="open-map" class="outline-btn" href="https://www.openstreetmap.org/" target="_blank" rel="noopener noreferrer">Ouvrir la carte ↗</a></div>
       <div id="map" aria-label="Carte interactive des coordonnées de la station"></div>
-      <div class="map-footer"><span class="map-dot"></span><span id="map-caption">La carte affichera le point de référence de la station sélectionnée.</span><span class="attribution">© OpenStreetMap contributors</span></div>
+      <div class="map-footer"><span class="map-dot"></span><span id="map-caption">La carte affichera le point calculé, les terminaux retenus et les groupes alternatifs.</span><span class="map-legend"><span><i class="legend-key input-key"></i>Point initial</span><span><i class="legend-key terminal-key"></i>Terminaux retenus</span><span><i class="legend-key alternative-key"></i>Groupes alternatifs</span></span><span class="attribution">© OpenStreetMap contributors</span></div>
     </section>
 
 
@@ -84,9 +105,9 @@
     </section>
 
     <section class="explanation">
-      <div class="info-icon">i</div><div><h3>Ce que fait réellement l’outil</h3><p>L’outil repère les remontées dans OpenStreetMap, estime l’altitude de leurs deux extrémités, retient les départs aval et calcule le centre du groupe bas retenu. Les altitudes peuvent venir des tags OSM ou du modèle numérique de terrain Copernicus GLO-90 via Open-Meteo (résolution d’environ 90 m). Si les données sont trop rares ou ambiguës, le calcul est refusé. Six décimales ne garantissent pas une précision de quelques centimètres.</p></div>
+      <div class="info-icon">i</div><div><h3>Ce que fait réellement l’outil</h3><p>L’agent recherche les remontées dans OpenStreetMap, exploite en priorité les balises de station bas/haut lorsqu’elles existent, puis utilise les altitudes pour orienter les remontées non balisées. Il regroupe les terminaux distincts, classe plusieurs groupes selon le soutien géographique, la proximité, la cohésion, les balises et la qualité des altitudes, puis explique son choix. Les altitudes Copernicus GLO-90 via Open-Meteo ont une résolution d’environ 90 m. Le score est une heuristique explicable, pas une probabilité. Six décimales ne garantissent pas une précision de quelques centimètres.</p></div>
     </section>
-    <footer>Remontées : OpenStreetMap contributors · Altitudes de terrain : Open-Meteo / Copernicus DEM GLO-90 · Le centre calculé est une estimation à vérifier sur le terrain ou sur une carte détaillée.</footer>
+    <footer>Remontées : © OpenStreetMap contributors · Altitudes : Open-Meteo / Copernicus DEM GLO-90 · L’analyse est autonome, mais le résultat reste une estimation à contrôler sur la carte détaillée.</footer>
   </main>
 </body>
 </html>

@@ -1,30 +1,41 @@
-# Repère GPS — estimation du front de neige
+# Repère GPS — agent géographique autonome
 
-Site statique HTML/CSS/JavaScript compatible avec GitHub Pages. L’interface et son style sont conservés ; le moteur calcule maintenant un centre estimé à partir des départs aval de remontées mécaniques.
+Site statique HTML/CSS/JavaScript compatible avec GitHub Pages et Cloudflare Pages. L’agent sélectionne automatiquement le groupe de terminaux aval le mieux étayé à partir de données cartographiques ouvertes, puis expose les candidats, les critères et les limites de son choix.
 
-## Publication sur GitHub Pages
+## Publication
 
-1. Décompresse le ZIP et envoie les cinq fichiers (`index.html`, `styles.css`, `app.js`, `stations.json`, `README.md`) à la racine d’un dépôt GitHub.
-2. Dans **Settings → Pages**, choisis **Deploy from a branch**, la branche `main` et le dossier `/(root)`.
-3. Ouvre l’URL publiée, colle une ligne comme `lat: 45.889, lon: 6.735`, puis clique sur **Identifier la station**.
+1. Décompresse le ZIP et envoie `index.html`, `styles.css`, `app.js`, `stations.json` et `README.md` à la racine du dépôt.
+2. Sur GitHub Pages, choisis **Settings → Pages → Deploy from a branch**, branche `main`, dossier `/(root)`. Sur Cloudflare Pages, conserve ton déploiement statique existant.
+3. Ouvre le site, saisis un format comme `lat: 45.889, lon: 6.735`, puis lance l’analyse autonome.
 
-## Fonctionnement du calcul
+## Comment l’agent décide
 
-1. L’outil cherche les remontées mécaniques OSM autour du point saisi. Il interroge d’abord un rayon de 12 km et élargit à 22 km lorsque peu de remontées sont trouvées.
-2. Pour chaque remontée, il récupère les deux nœuds d’extrémité. L’altitude provient du tag `ele` dans OpenStreetMap lorsqu’il existe ; sinon, le moteur interroge l’API Elevation d’Open-Meteo, basée sur Copernicus DEM GLO-90.
-3. Il estime l’extrémité aval d’après les altitudes, écarte les remontées dont la différence d’altitude ne permet pas de connaître le sens de manière suffisamment fiable, puis regroupe les départs aval proches géographiquement.
-4. Il retient le groupe bas le plus pertinent et calcule la moyenne des latitudes et longitudes de ses départs aval. La carte, la copie et les coordonnées à six décimales affichent ce centre.
-5. `stations.json` est facultatif pour le calcul : il sert seulement à proposer un nom de station et des suggestions. Une station absente du fichier est donc quand même recherchée directement dans OpenStreetMap.
+1. Recherche d’abord les remontées mécaniques OpenStreetMap dans un rayon de 12 km, puis élargit à 22 km si la première recherche trouve trop peu de remontées.
+2. Identifie les extrémités des lignes de remontées. Les balises explicites `aerialway:station=bottom` et `aerialway:station=top` sont prioritaires. En leur absence, l’altitude des extrémités sert à estimer le sens aval.
+3. Quand une altitude manque, interroge Open-Meteo Elevation, basé sur Copernicus DEM GLO-90. Les altitudes de ce modèle sont approximatives (résolution spatiale d’environ 90 m).
+4. Regroupe les terminaux à moins d’environ 750 m les uns des autres, fusionne les positions presque superposées (seuil de 45 m) pour limiter les doubles comptes et calcule le centre géographique de chaque groupe.
+5. Classe les groupes avec un score heuristique lisible : soutien par les terminaux distincts (28 points maximum), proximité du point d’analyse (24), cohésion géographique (14), balises explicites bottom/top (19), qualité des données d’altitude (7) et comparaison relative des altitudes (8). Un groupe isolé est pénalisé en matière de soutien, et une sélection multi-terminaux est privilégiée lorsqu’elle existe. Ce score n’est **pas** une probabilité statistique.
+6. Affiche le groupe retenu et les groupes alternatifs dans le rapport ; la carte distingue le point d’entrée, les terminaux retenus, le centre calculé et les centres candidats alternatifs.
+
+## Gratuité et cache
+
+- Aucune clé API et aucun modèle génératif payant ne sont nécessaires.
+- Les données OpenStreetMap sont demandées aux instances publiques Overpass ; elles sont gratuites, mais soumises à des limites, et peuvent être indisponibles. Le moteur conserve temporairement certains résultats dans le stockage local du navigateur afin de limiter les requêtes répétées.
+- Open-Meteo Elevation n’exige pas de clé pour un usage non commercial dans les limites de son offre gratuite. L’usage commercial ou un volume plus élevé peut nécessiter une offre payante. Consulte les conditions à jour avant de publier un service commercial.
+- Le fond de carte standard utilise les tuiles OpenStreetMap, dont le serveur a une politique d’usage. Ne pas précharger ou aspirer massivement les tuiles.
 
 ## Limites importantes
 
-- Les tags OSM et les géométries de remontées ne sont pas toujours complets ou à jour. Les départs aval sont estimés à partir des extrémités des lignes de remontées cartographiées.
-- Quand un tag `ele` manque, l’API Open-Meteo utilise un modèle de terrain d’environ 90 m de résolution : il peut être incapable de distinguer deux extrémités proches en altitude. Le moteur préfère alors signaler le manque de données plutôt que produire une fausse précision.
-- Un résultat à six décimales est un format numérique, pas une garantie de précision métrique ou centimétrique. Vérifie le point sur la carte avant de l’utiliser comme référence exacte.
-- Le projet est entièrement côté navigateur, mais nécessite Internet pour les tuiles cartographiques, Overpass et les altitudes. Les instances publiques peuvent être temporairement indisponibles ou limitées.
+- Cet « agent » est un moteur géographique autonome explicable, pas une IA générative. Cela évite d’envoyer les coordonnées à un modèle externe ou de laisser un modèle inventer des résultats.
+- La complétude et la fraîcheur des données dépendent d’OpenStreetMap. Une remontée peut manquer, être mal tracée ou avoir des balises incomplètes.
+- Le modèle GLO-90 ne permet pas toujours d’orienter avec fiabilité deux terminaux proches en altitude ; ces cas sont rejetés ou moins favorisés lorsqu’il manque une balise explicite.
+- Le « front de neige » n’est pas une notion cartographique unique. Le point calculé représente un centre des terminaux aval trouvés, pas forcément le centre réel des bâtiments, caisses ou départs de pistes.
+- Vérifie systématiquement les marqueurs et le point calculé sur une carte détaillée. Six décimales ne garantissent pas une précision métrique ou centimétrique.
 
-## Données et attribution
+## Sources et attribution
 
-- Remontées et données cartographiques : © OpenStreetMap contributors, distribuées sous la licence ODbL.
-- Altitudes de terrain : Open-Meteo Elevation API / Copernicus DEM GLO-90.
+- Remontées et données cartographiques : © OpenStreetMap contributors, licence ODbL.
+- Altitudes : Open-Meteo Elevation API et Copernicus DEM GLO-90 ; attribution Open-Meteo et Copernicus requise.
 - Fond de carte : tuiles standard OpenStreetMap.
+
+Documentation : [balises de station des remontées OSM](https://wiki.openstreetmap.org/wiki/Key:aerialway:station), [Overpass API](https://wiki.openstreetmap.org/wiki/Overpass_API), [Open-Meteo Elevation](https://open-meteo.com/en/docs/elevation-api), [conditions Open-Meteo](https://open-meteo.com/en/terms).
