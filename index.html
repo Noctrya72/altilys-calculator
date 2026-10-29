@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0b1b2d">
-  <meta name="description" content="Agent géographique autonome pour estimer un front de neige depuis des coordonnées GPS et les données ouvertes des remontées mécaniques.">
-  <title>Repère GPS — Agent géographique autonome</title>
+  <meta name="description" content="Recherche les coordonnées de référence et les ressources officielles des stations de ski.">
+  <title>Repère GPS — Stations de ski</title>
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -20,7 +20,60 @@
     <section class="intro">
       <p class="eyebrow">COORDONNÉES APPROXIMATIVES → RÉFÉRENCE STATION</p>
       <h1>Retrouve le bon point GPS.</h1>
-      <p class="intro-copy">Colle une seule ligne de coordonnées. L’agent géographique recherche les remontées mécaniques, identifie les terminaux aval, compare plusieurs groupes candidats et choisit automatiquement le point le mieux étayé. Une station absente du catalogue peut tout de même être recherchée.</p>
+      <p class="intro-copy">Colle une seule ligne de coordonnées. L’outil compare le point au catalogue de stations, identifie les stations les plus proches et propose leurs coordonnées de référence.</p>
+    </section>
+
+    <section class="resource-agent-card" aria-labelledby="resource-agent-title">
+      <div class="card-heading">
+        <div><span class="step">WEB</span><h2 id="resource-agent-title">Agent de recherche de liens</h2></div>
+        <span class="small-tag">Site officiel · webcams · PDF</span>
+      </div>
+      <p class="agent-intro">Indique le nom d’une station. L’agent recherche son accueil officiel en privilégiant la version hiver, une page de webcams avec indication de couverture, et le plan des pistes PDF le plus récent trouvé.</p>
+      <form id="resource-form">
+        <label for="resource-station-input">Nom de la station</label>
+        <div class="input-wrap">
+          <input id="resource-station-input" name="station" autocomplete="off" spellcheck="false" placeholder="Ex. : Chamrousse" required maxlength="100">
+          <button class="primary-btn" id="resource-search-button" type="submit"><span>Rechercher les liens</span><span aria-hidden="true">↗</span></button>
+        </div>
+        <div class="input-meta"><span>Recherche sur le Web public, sans clé API.</span><button id="resource-use-example" type="button" class="text-btn">Exemple : Les 2 Alpes</button></div>
+      </form>
+      <div id="resource-agent-status" class="status" role="status" aria-live="polite">Entre le nom d’une station pour démarrer la recherche.</div>
+      <div id="resource-agent-results" class="resource-results" hidden>
+        <div class="resource-result-grid">
+          <article class="resource-result" id="official-result">
+            <div class="resource-result-title"><span class="resource-index">01</span><h3>Site officiel — accueil hiver</h3></div>
+            <p class="resource-kind" id="official-kind">En attente</p>
+            <a id="official-link" class="resource-url" target="_blank" rel="noopener noreferrer" hidden></a>
+            <p id="official-details" class="resource-details"></p>
+          </article>
+          <article class="resource-result" id="webcam-result">
+            <div class="resource-result-title"><span class="resource-index">02</span><h3>Webcams</h3></div>
+            <p class="resource-kind" id="webcam-scope">Couverture à vérifier</p>
+            <a id="webcam-link" class="resource-url" target="_blank" rel="noopener noreferrer" hidden></a>
+            <p id="webcam-details" class="resource-details"></p>
+          </article>
+          <article class="resource-result" id="plan-result">
+            <div class="resource-result-title"><span class="resource-index">03</span><h3>Plan des pistes PDF</h3></div>
+            <p class="resource-kind" id="plan-season">Recherche du PDF le plus récent</p>
+            <a id="plan-link" class="resource-url" target="_blank" rel="noopener noreferrer" hidden></a>
+            <p id="plan-details" class="resource-details"></p>
+          </article>
+        </div>
+        <div id="resource-alternatives" class="resource-alternatives" hidden></div>
+        <div class="resource-code-card">
+          <div class="coordinate-output-heading">
+            <div><span class="output-label">RÉSULTAT À COPIER</span><p class="precision-note">Les deux dernières lignes sont indentées de 12 espaces.</p></div>
+            <button id="copy-resource-code" class="copy-btn" type="button">Copier le résultat</button>
+          </div>
+          <pre class="resource-code"><code id="resource-code-output">url: "",
+
+            webcam: "",
+
+            plan: "",</code></pre>
+        </div>
+        <p class="resource-disclaimer">L’agent classe des résultats de recherche et leurs extraits : vérifie les liens avant de les intégrer. Un plan est retenu uniquement si un fichier PDF direct est identifié. La couverture des webcams est déclarée comme confirmée seulement lorsque les résultats la décrivent explicitement.</p>
+      </div>
+      <div id="resource-manual-search" class="resource-manual-search" hidden></div>
     </section>
 
     <section class="search-card" aria-labelledby="search-title">
@@ -30,7 +83,7 @@
       </div>
       <form id="coordinate-form">
         <label for="coordinate-input">Latitude et longitude</label>
-        <div class="input-wrap"><input id="coordinate-input" name="coordinates" autocomplete="off" spellcheck="false" value="lat: 45.889, lon: 6.735" placeholder="lat: 45.889, lon: 6.735" required><button class="primary-btn" id="search-button" type="submit"><span>Lancer l’analyse autonome</span><span aria-hidden="true">↗</span></button></div>
+        <div class="input-wrap"><input id="coordinate-input" name="coordinates" autocomplete="off" spellcheck="false" value="lat: 45.889, lon: 6.735" placeholder="lat: 45.889, lon: 6.735" required><button class="primary-btn" id="search-button" type="submit"><span>Identifier la station</span><span aria-hidden="true">↗</span></button></div>
         <div class="input-meta"><span>Exemple : <code>lat: 45.889, lon: 6.735</code></span><button id="use-example" type="button" class="text-btn">Charger un exemple</button></div>
       </form>
       <div id="status" class="status" role="status" aria-live="polite">Prêt à analyser les coordonnées.</div>
@@ -39,7 +92,7 @@
     <section id="result-section" class="result-section" hidden>
       <div class="result-card">
         <div class="card-heading">
-          <div><span class="step">02</span><h2>Résultat de l’analyse</h2></div>
+          <div><span class="step">02</span><h2>Station reconnue</h2></div>
           <span id="confidence" class="confidence">Correspondance</span>
         </div>
         <div class="station-title-row"><div><p id="station-massif" class="station-massif"></p><h3 id="station-name">—</h3><p id="station-distance" class="distance"></p></div><a id="osm-link" class="outline-btn" target="_blank" rel="noopener noreferrer">Voir sur OSM ↗</a></div>
@@ -50,64 +103,18 @@
         </div>
         <div class="alternatives-wrap"><div class="alternatives-header"><h4>Autres stations proches</h4><span>Choisis si la première n’est pas la bonne</span></div><div id="alternatives" class="alternatives"></div></div>
       </div>
-      <section id="agent-report" class="agent-report" hidden aria-labelledby="agent-report-title">
-        <div class="agent-report-top">
-          <div>
-            <span class="step">AGENT AUTONOME</span>
-            <h2 id="agent-report-title">Pourquoi ce point a été choisi</h2>
-            <p id="agent-summary" class="agent-summary"></p>
-          </div>
-          <div class="agent-score-block"><strong id="agent-score">—/100</strong><span id="agent-confidence">À vérifier sur la carte</span></div>
-        </div>
-        <div class="agent-report-grid">
-          <div class="agent-method-card">
-            <h3>Étapes de l’analyse</h3>
-            <ol id="agent-events" class="agent-events"></ol>
-          </div>
-          <div class="agent-method-card">
-            <h3>Groupes comparés</h3>
-            <div id="agent-candidates" class="agent-candidates"></div>
-          </div>
-        </div>
-        <p class="agent-disclaimer">Cet agent est autonome mais ne s’appuie pas sur un modèle génératif : il applique un classement géographique explicable. Le score est heuristique, pas une probabilité de justesse. Les données OSM peuvent être incomplètes ; vérifie toujours le point sur la carte.</p>
-      </section>
     </section>
 
     <section class="map-card">
       <div class="card-heading map-heading"><div><span class="step">03</span><h2>Emplacement sur la carte</h2></div><a id="open-map" class="outline-btn" href="https://www.openstreetmap.org/" target="_blank" rel="noopener noreferrer">Ouvrir la carte ↗</a></div>
       <div id="map" aria-label="Carte interactive des coordonnées de la station"></div>
-      <div class="map-footer"><span class="map-dot"></span><span id="map-caption">La carte affichera le point calculé, les terminaux retenus et les groupes alternatifs.</span><span class="map-legend"><span><i class="legend-key input-key"></i>Point initial</span><span><i class="legend-key terminal-key"></i>Terminaux retenus</span><span><i class="legend-key alternative-key"></i>Groupes alternatifs</span></span><span class="attribution">© OpenStreetMap contributors</span></div>
-    </section>
-
-
-
-    <section class="search-card format-converter" aria-labelledby="format-converter-title">
-      <div class="card-heading">
-        <div><span class="step">04</span><h2 id="format-converter-title">Convertir des coordonnées GPS</h2></div>
-        <span class="small-tag">Format texte</span>
-      </div>
-      <form id="format-converter-form">
-        <label for="hemisphere-input">Coordonnées avec les points cardinaux</label>
-        <div class="input-wrap">
-          <input id="hemisphere-input" name="hemisphere-coordinates" autocomplete="off" spellcheck="false" value="45.892693°N 6.782763°E" placeholder="45.892693°N 6.782763°E" required>
-          <button class="primary-btn" id="format-convert-button" type="submit"><span>Convertir</span><span aria-hidden="true">↗</span></button>
-        </div>
-        <div class="input-meta"><span>Exemple : <code>45.892693°N 6.782763°E</code></span><button id="format-use-example" type="button" class="text-btn">Charger l’exemple</button></div>
-      </form>
-      <div id="format-status" class="status" role="status" aria-live="polite">Saisis les coordonnées puis clique sur Convertir.</div>
-      <div id="format-result" class="format-result" hidden>
-        <div class="coordinate-output-heading">
-          <div><span class="output-label">FORMAT PRÊT À COPIER</span><p class="precision-note">Les deux lignes sont séparées, avec les virgules et l’indentation demandée.</p></div>
-          <button id="format-copy-button" class="copy-btn" type="button">Copier</button>
-        </div>
-        <pre id="formatted-coordinates" class="format-coordinate-output"></pre>
-      </div>
+      <div class="map-footer"><span class="map-dot"></span><span id="map-caption">La carte affichera le point de référence de la station sélectionnée.</span><span class="attribution">© OpenStreetMap contributors</span></div>
     </section>
 
     <section class="explanation">
-      <div class="info-icon">i</div><div><h3>Ce que fait réellement l’outil</h3><p>L’agent recherche les remontées dans OpenStreetMap, exploite en priorité les balises de station bas/haut lorsqu’elles existent, puis utilise les altitudes pour orienter les remontées non balisées. Il regroupe les terminaux distincts, classe plusieurs groupes selon le soutien géographique, la proximité, la cohésion, les balises et la qualité des altitudes, puis explique son choix. Les altitudes Copernicus GLO-90 via Open-Meteo ont une résolution d’environ 90 m. Le score est une heuristique explicable, pas une probabilité. Six décimales ne garantissent pas une précision de quelques centimètres.</p></div>
+      <div class="info-icon">i</div><div><h3>Ce que fait réellement l’outil</h3><p>Il ne transforme pas mathématiquement une coordonnée arrondie en coordonnée exacte : il cherche la station la plus proche dans le catalogue, puis utilise ses coordonnées de référence. Si la donnée du catalogue est approximative, l’outil tente de la vérifier avec OpenStreetMap. Les décimales affichées ne garantissent pas à elles seules une précision de quelques centimètres.</p></div>
     </section>
-    <footer>Remontées : © OpenStreetMap contributors · Altitudes : Open-Meteo / Copernicus DEM GLO-90 · L’analyse est autonome, mais le résultat reste une estimation à contrôler sur la carte détaillée.</footer>
+    <footer>Catalogue de stations adapté des données ALPÉLYS fournies · Les coordonnées peuvent désigner un point de référence de station, pas toute l’étendue du domaine skiable.</footer>
   </main>
 </body>
 </html>
