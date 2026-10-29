@@ -417,7 +417,11 @@ function bootFormatConverter() {
     event.preventDefault();
     try {
       const point = parseHemisphereCoordinates(input.value);
+<<<<<<< HEAD
       const indentation = ' '.repeat(13);
+=======
+      const indentation = ' '.repeat(12);
+>>>>>>> 0d76610 (identation de 13 a 12)
       output.textContent = `lat: ${point.lat.toFixed(6)},\n${indentation}lon: ${point.lon.toFixed(6)},`;
       result.hidden = false;
       status.textContent = 'Coordonnées converties. Le format avec indentation est prêt à copier.';
