@@ -26,3 +26,24 @@
 .resource-manual-search p{font-size:11px;line-height:1.7;color:#d8c7a5;margin:0 0 8px}
 .resource-manual-search a{display:inline-block;margin:4px 10px 4px 0;color:#a9cfff;font-size:11px;text-decoration:underline;text-underline-offset:2px}
 @media(max-width:760px){.resource-result-grid{grid-template-columns:1fr}.resource-agent-card{padding:17px 15px}.resource-code{font-size:11px}}
+
+
+/* Ajout isolé : convertisseur de coordonnées avec hémisphères. */
+.format-converter .input-wrap { align-items: stretch; }
+.format-converter .input-wrap input { flex: 1 1 auto; }
+.format-result { margin-top: 17px; padding-top: 16px; border-top: 1px solid #20344a; }
+.format-coordinate-output {
+  margin: 13px 0 0;
+  padding: 16px;
+  overflow-x: auto;
+  border: 1px solid #2c455b;
+  border-radius: 11px;
+  background: #071521;
+  color: #f0f8ff;
+  font: 500 14px/1.9 'DM Mono', monospace;
+  white-space: pre;
+  tab-size: 4;
+}
+@media(max-width:640px) {
+  .format-coordinate-output { font-size: 12px; padding: 12px; }
+}

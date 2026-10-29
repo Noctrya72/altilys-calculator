@@ -111,6 +111,30 @@
       <div class="map-footer"><span class="map-dot"></span><span id="map-caption">La carte affichera le point de référence de la station sélectionnée.</span><span class="attribution">© OpenStreetMap contributors</span></div>
     </section>
 
+
+    <section class="search-card format-converter" aria-labelledby="format-converter-title">
+      <div class="card-heading">
+        <div><span class="step">04</span><h2 id="format-converter-title">Convertisseur Google Earth → format à copier</h2></div>
+        <span class="small-tag">Format texte</span>
+      </div>
+      <form id="format-converter-form">
+        <label for="hemisphere-input">Coordonnées copiées depuis Google Earth (latitude et longitude avec points cardinaux)</label>
+        <div class="input-wrap">
+          <input id="hemisphere-input" name="hemisphere-coordinates" autocomplete="off" spellcheck="false" value="45.892693°N 6.782763°E" placeholder="45.892693°N 6.782763°E" required>
+          <button class="primary-btn" id="format-convert-button" type="submit"><span>Convertir</span><span aria-hidden="true">↗</span></button>
+        </div>
+        <div class="input-meta"><span>Exemple : <code>45.892693°N 6.782763°E</code></span><button id="format-use-example" type="button" class="text-btn">Charger l’exemple</button></div>
+      </form>
+      <div id="format-status" class="status" role="status" aria-live="polite">Saisis les coordonnées puis clique sur Convertir.</div>
+      <div id="format-result" class="format-result" hidden>
+        <div class="coordinate-output-heading">
+          <div><span class="output-label">FORMAT PRÊT À COPIER</span><p class="precision-note">Le résultat est formaté sur deux lignes, avec les virgules et l’indentation conservée.</p></div>
+          <button id="format-copy-button" class="copy-btn" type="button">Copier</button>
+        </div>
+        <pre id="formatted-coordinates" class="format-coordinate-output"></pre>
+      </div>
+    </section>
+
     <section class="explanation">
       <div class="info-icon">i</div><div><h3>Ce que fait réellement l’outil</h3><p>Il ne transforme pas mathématiquement une coordonnée arrondie en coordonnée exacte : il cherche la station la plus proche dans le catalogue, puis utilise ses coordonnées de référence. Si la donnée du catalogue est approximative, l’outil tente de la vérifier avec OpenStreetMap. Les décimales affichées ne garantissent pas à elles seules une précision de quelques centimètres.</p></div>
     </section>

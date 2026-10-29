@@ -40,6 +40,11 @@ url: "https://www.exemple.fr/hiver",
 
 Les espaces visibles dans les lignes `webcam` et `plan` font partie du résultat copié. Les annotations indiquent la portée estimée des webcams et la saison détectée. Elles restent indicatives.
 
+
+## Convertisseur Google Earth → format à copier
+
+La page conserve aussi le convertisseur de coordonnées au format avec points cardinaux (par exemple `45.892693°N 6.782763°E`). Il produit les deux lignes `lat` et `lon`, avec six décimales et l’indentation utilisée par le projet, et possède son propre bouton Copier. Cette fonction est exécutée dans le navigateur et ne dépend pas du service Cloudflare.
+
 ## Limites à connaître
 
 - Le site « officiel » est une estimation basée sur les titres, extraits et URLs retournés par le moteur de recherche ; il n'y a pas de registre universel des sites officiels.
